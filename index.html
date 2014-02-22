@@ -1,0 +1,419 @@
+<html>
+<head>
+<title>pima</title>
+<style>
+
+body {
+    margin: 0px;
+}
+table {
+    border-collapse: collapse;
+}
+th, td {
+    padding: 0px;
+}
+
+</style>
+</head>
+<body>
+<script src="https://www.dropbox.com/static/api/dropbox-datastores-1.0-latest.js"></script>  
+<script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
+<script src="http://dglittle.github.io/gl519/index.js"></script>
+<script src="http://dglittle.github.io/gl519/tab.js"></script>
+<script src="http://dglittle.github.io/gl519/aes.js"></script>
+<script src="utils.js"></script>
+<script>
+
+function newCard() {
+    var now = _.time()
+    return {
+        id : '' + Math.random(),
+        text : "",
+        createTime : now,
+        showTime : now,
+        touchTime : now
+    }
+}
+
+function mergeCards(c1, c2) {
+    if (!c2.dirty) return c1
+    return {
+        id : c1.id,
+        text : c1.text == c2.text ? c1.text : 'CONFLICT----\n' + c1.text + '\nCONFLICT----\n' + c2.text,
+        createTime : Math.min(c1.createTime, c2.createTime),
+        showTime : c1.text == c2.text ? Math.min(c1.showTime, c2.showTime) : 0,
+        touchTime : Math.max(c1.touchTime, c2.touchTime)
+    }
+}
+
+function newModel() {
+    return {
+        cards : [],
+        workingCard : newCard()
+    }
+}
+
+function mergeModels(m1, m2) {
+    var m = {}
+    _.extend(m, m1)
+    _.extend(m, m2)
+
+    m.cards = {}
+    _.each(m1.cards, function (c) {
+        m.cards[c.id] = c
+    })
+    _.each(m2.cards, function (c) {
+        if (!m.cards[c.id]) {
+            m.cards[c.id] = c
+        } else {
+            m.cards[c.id] = mergeCards(m.cards[c.id], c)
+        }
+    })
+    m.cards = _.values(m.cards)
+
+    m.workingCard = mergeCards(m1.workingCard, m2.workingCard)
+
+    return m
+}
+
+function encrypt(plaintext, password) {
+    return Aes.Ctr.encrypt(plaintext, password, 256);
+}
+
+function decrypt(ciphertext, password) {
+    return Aes.Ctr.decrypt(ciphertext, password, 256);
+}
+
+function getPassword(cb) {
+    var d = $('<div/>').text("password:")
+    function onOk() {
+        _.closeDialog()
+        cb(pass.val())
+    }
+    var pass = $('<input type="password"/>').keydown(function (e) {
+        if (e.keyCode == 13) {
+            e.preventDefault()
+            onOk()
+        }
+    })
+    d.append(pass)
+    d.append($('<button/>').text('ok').click(function () {
+        onOk()
+    }))
+    _.dialog(d)
+    pass.focus()
+}
+
+function parseModel(s, cb) {
+    if (!s) {
+        cb(newModel())
+        return
+    }
+    try {
+        var m = _.unJson(s)
+        if (!m.cards[0].id) throw 'bad'
+    } catch (e) {
+        return getPassword(function (pass) {
+            try {
+                var m = _.unJson(decrypt(s, pass))
+                if (!m.cards[0].id) throw 'bad'
+            } catch (e) {
+                setTimeout(function () {
+                    parseModel(s, cb)
+                }, 0)
+                return
+            }
+            cb(m)
+        })
+    }
+    cb(m)
+}
+
+function getTitle(card) {
+    return card.text.match(/\s*(.*)/)[1]
+}
+
+function searchCards(cards, q) {
+    var REs = _.map(q.split(/\s+|\b/), function (q) { return new RegExp(_.escapeRegExp(q), "i") })
+    
+    function scoreCard(card) {
+        var score = -1
+        var title = getTitle(card)
+        _.each(REs, function (re) {
+            if (title.match(re))
+                score += 3
+            else if (card.text.match(re))
+                score += 1
+        })
+        return score + (1.0 / (title.length + 2))
+    }
+
+    return _.map(_.filter(_.map(cards, function (c) {
+        return { card : c, score : scoreCard(c) }
+    }), function (e) {
+        return e.score >= 0
+    }).sort(comparator(function (e) {
+        return -e.score
+    })), function (e) {
+        return e.card
+    })
+}
+
+function drawModel(m, dirty, redraw) {
+    var currentCard = _.max(m.cards, function (c) { return c.touchTime })
+
+    function drawCardEditor(c) {
+        var d = $('<div style="width:100%;height:100%"/>')
+        var t = $('<textarea style="width:100%;height:100%"/>')
+        t.val(c.text)
+        function f() {
+            if (c.text != t.val()) {
+                c.text = t.val()
+                dirty(c)
+            }
+        }
+        t.keyup(f)
+        t.change(f)
+        d.append(t)
+        return d
+    }
+
+    function drawCurrentCard() {
+        return drawCardEditor(currentCard)
+    }
+
+    function drawSmallCard(c) {
+        var d = $('<div style="width:100%"/>')
+        d.text(c.text)
+        d.height('1.2em')
+        d.css('overflow', 'hidden')
+        d.css('background', c == currentCard ? 'gold' : 'lightgrey')
+        d.click(function() {
+            c.touchTime = _.time()
+            dirty(c)
+            redraw()
+        })
+        return d
+    }
+
+    function drawCardList() {
+        var upcoming = $('<button/>').text('upcoming').click(function () {
+            delete m.cardListView
+            dirty()
+            redraw()
+        })
+        var recent = $('<button/>').text('recent').click(function () {
+            m.cardListView = 'recent'
+            dirty()
+            redraw()
+        })
+        function onSearch() {
+            m.cardListView = {
+                search : searchInput.val() || 'nothing'
+            }
+            dirty()
+            redraw()
+        }
+        var searchInput = $('<input type="text" style="width:100%"/>').keydown(function (e) {
+            if (e.keyCode == 13) onSearch()
+        })
+        var search = $('<button/>').text('search').click(onSearch)
+        globalHotkeyYay(search, function (e) {
+            if (e.metaKey && (e.keyCode == 70)) {
+                e.preventDefault()
+                searchInput.focus().select()
+            }
+        })
+        var buttons = _.splitHorz(2, 1, upcoming, _.splitHorz(2, 1, recent, _.splitHorz(1, 2, searchInput, search)))
+
+        function drawHeader(text) {
+            return $('<div style="margin-top:15px;margin-bottom:5px;margin-left:5px;font-size:small;font-weight:bold"/>').text(text)
+        }
+
+        var list = $('<div style="width:100%"/>')
+        if (m.cardListView == 'recent') {
+            list.append(drawHeader('recent'))
+            _.each(_.sort(m.cards, function (c) { return -c.touchTime }), function (c) {
+                list.append(drawSmallCard(c))
+            })
+        } else if (m.cardListView && m.cardListView.search) {
+            list.append(drawHeader('search results for: ' + m.cardListView.search))
+            _.each(searchCards(m.cards, m.cardListView.search), function (c) {
+                list.append(drawSmallCard(c))
+            })
+        } else {
+            var startOfToday = _.getStartOfDay(_.time())
+            function getDisplayDate(time) {
+                return ("" + new Date(time)).replace(/0+([1-9])/g, '$1').match(/\S+ \S+ \S+/)[0]
+            }
+            function drawTimeHeader(time) {
+                var text = null
+                if (time < startOfToday)
+                    text = "backlog"
+                else if (time >= startOfToday && time < startOfToday + 24 * 60 * 60 * 1000)
+                    text = getDisplayDate(time) + " (today)"
+                else
+                    text = getDisplayDate(time)
+                return drawHeader(text)
+            }
+
+            var nextHeaderTime = startOfToday
+            _.each(_.sort(m.cards, function (c) { return c.showTime }), function (c, i) {
+                if (i == 0 && c.showTime < startOfToday) {
+                    list.append(drawTimeHeader(c.showTime))
+                }
+                while (nextHeaderTime <= c.showTime) {
+                    list.append(drawTimeHeader(nextHeaderTime))
+                    nextHeaderTime += 24 * 60 * 60 * 1000
+                }
+                list.append(drawSmallCard(c).css('margin-bottom', '1px'))
+            })
+        }
+
+        return _.splitVert(2, 1, buttons, list)
+    }
+
+    var currentCardDiv = drawCurrentCard()
+    var d = _.splitHorz(1/3, 2/3, drawCardEditor(m.workingCard), _.splitHorz(.5, .5, currentCardDiv, drawCardList()))
+    setTimeout(function () {
+        currentCardDiv.find('textarea').focus()
+    }, 0)
+
+    globalHotkeyYay(d, function (e) {
+        if (e.metaKey && (e.keyCode == 13)) {
+            e.preventDefault()
+            m.cards.push(newCard())
+            dirty()
+            redraw()
+        }
+    })
+
+    return d
+}
+
+function drawModelContainer() {
+    var m = newModel()
+    m.new = true
+
+    var top = $('<div style="width:100%"/>')
+    var pullButton = $('<button style="width:7em"/>').text('pull').click(pull)
+    top.append(pullButton)
+    var saveButton = $('<button style="width:7em"/>').enabled(false).text('save').click(save)
+    top.append(saveButton)
+    top.append($('<button/>').text('set password').click(function () {
+        alert('work here')
+    }))
+
+    function dirty(c) {
+        if (c) c.dirty = true
+        saveButton.enabled(true)
+        if (dirty.timer) clearTimeout(dirty.timer)
+        dirty.timer = setTimeout(function () {
+            if (saveButton.enabled())
+                save()
+        }, 5000)
+    }
+
+    function pull(cb) {
+        pull.count = (pull.count || 0) + 1
+        pullButton.text('pulling...')
+        function done() {
+            pull.count--
+            if (pull.count == 0) pullButton.text('pull')
+            if (cb) cb()
+        }
+
+        g_dropbox.readFile('/data.txt', function (err, s, f) {
+            if (f && f.versionTag != m.parentTag && f.modifiedAt.getTime() >= (m.parentTime || 0)) {
+                parseModel(s, function (m2) {
+                    if (m.new) {
+                        m = m2
+                    } else {
+                        m = mergeModels(m2, m)
+                        dirty()
+                        redraw()
+                    }
+                    m.parentTag = f.versionTag
+                    m.parentTime = f.modifiedAt.getTime()
+                    done()
+                })
+            } else {
+                if (m.new) {
+                    delete m.new
+                }
+                done()
+            }
+        })
+    }
+
+    function save(cb) {
+        save.count = (save.count || 0) + 1
+        saveButton.text('saving...')
+        function done() {
+            save.count--
+            if (save.count == 0) saveButton.text('save')
+            if (cb) cb()
+        }
+
+        saveButton.enabled(false)
+        var s = _.json(m)
+
+        g_dropbox.writeFile('/data.txt', s, { lastVersionTag : m.parentTag }, function (err, f) {
+            if (err) return alert(err)
+            if (f.path.match(/conflicted copy/)) {
+                g_dropbox.remove(f.path, function () {})
+                pull(function () {
+                    save(done)
+                })
+            } else {
+                if (f && f.versionTag != m.parentTag && f.modifiedAt.getTime() >= (m.parentTime || 0)) {
+                    m.parentTag = f.versionTag
+                    m.parentTime = f.modifiedAt.getTime()
+                }
+                done()
+            }
+        })
+    }
+
+    function redraw() {
+        if (m.cards.length == 0) {
+            m.cards.push(newCard())
+            dirty()
+        }
+        bottom.empty().append(drawModel(m, dirty, redraw))
+    }
+    var bottom = $('<div style="width:100%;height:100%"/>')
+    pull(redraw)
+
+    return _.splitVert(2, 1, top, bottom)
+}
+
+function globalHotkeyYay(target, func) {
+    if (!globalHotkeyYay.init) {
+        globalHotkeyYay.init = true
+        $('body').keydown(function (e) {
+            _.each($('.globalHotkeyYay').get(), function (o) {
+                o.globalHotkeyYay(e)
+            })
+        })
+    }
+    $('<div class="globalHotkeyYay"/>').appendTo(target)[0].globalHotkeyYay = func
+}
+
+$(function () {
+    g_dropbox = new Dropbox.Client({ key : 'g55f8k9sfzzgkar' })
+    g_dropbox.authenticate({ interactive : false })
+    if (g_dropbox.isAuthenticated()) {
+        $('body').append(drawModelContainer())
+    } else {
+        $('body').append($('<button/>').text('login with dropbox').click(function () {
+            $('body').empty().append(createThrobber())
+            g_dropbox.authenticate()
+        }))
+    }
+})
+
+</script>
+
+</body>
+</html>
