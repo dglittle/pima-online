@@ -267,19 +267,22 @@ jQuery.fn.extend({
 })
 
 function createThrobber() {
-    var d = $('<div style="width:30px;height:10px;background:white"/>')
-    var dd = $('<div style="width:0px;height:10px;background:blue"/>')
-    d.append(dd)
+    var d = $('<span/>')
+    var anim = [
+        '|---',
+        '-|--',
+        '--|-',
+        '---|',
+        '--|-',
+        '-|--'
+    ]
     var start = _.time()
     var i = setInterval(function () {
         if ($.contains(document.documentElement, d[0])) {
             var t = (_.time() - start) / 1000
-            t *= 6
-            var w = _.lerp(-1, 10, 1, 30, Math.sin(t))
-            dd.css('width', w + 'px')
-            dd.css('margin-left', (30 - w) / 2 + 'px')
-        } else
-            clearInterval(i)
+            t *= 3
+            d.text(anim[Math.floor(t % anim.length)])
+        } else clearInterval(i)
     }, 30)
-    return d;
+    return d
 }
