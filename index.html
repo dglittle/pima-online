@@ -63,7 +63,7 @@ function mergeCards(c1, c2, parentC) {
     }
     return {
         id : c1.id,
-        text : 'CONFLICT----\n' + c1.text + '\nCONFLICT----\n' + c2.text,
+        text : c1.text != c2.text ? 'CONFLICT----\n' + c1.text + '\nCONFLICT----\n' + c2.text : c1.text,
         createTime : Math.min(c1.createTime, c2.createTime),
         showTime : 0,
         touchTime : Math.max(c1.touchTime, c2.touchTime)
@@ -267,7 +267,7 @@ function drawModel(m, dirty, redraw, mobile) {
         function createButton(label, time) {
             d.append($('<button/>').text(label).click(function () {
                 pushback(c, time)
-            }))
+            }).css('font-size', mobile ? 'large' : 'normal'))
         }
         createButton('.', 0)
         createButton('1', day)
