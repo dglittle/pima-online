@@ -228,12 +228,13 @@ function searchCards(cards, q) {
     })
 }
 
-function drawModel(m, dirty, redraw) {
+function drawModel(m, dirty, redraw, mobile) {
     var currentCard = _.max(m.cards, function (c) { return c.touchTime })
     var day = 24 * 60 * 60 * 1000
 
     function openCard(c) {
         c.touchTime = _.time()
+        m.view.tab = 'current'
         dirty()
         redraw()
     }
@@ -412,14 +413,15 @@ function drawModel(m, dirty, redraw) {
         }
 
         var list = $('<div style="width:100%"/>')
+        var n = 100
         if (m.view.cardList == 'recent') {
             list.append(drawHeader('recent'))
-            _.each(_.sort(m.cards, function (c) { return -c.touchTime }), function (c) {
+            _.each(_.sort(m.cards, function (c) { return -c.touchTime }).slice(0, n), function (c) {
                 list.append(drawSmallCard(c))
             })
         } else if (m.view.cardList && m.view.cardList.search) {
             list.append(drawHeader('search results for: ' + m.view.cardList.search))
-            _.each(searchCards(m.cards, m.view.cardList.search), function (c) {
+            _.each(searchCards(m.cards, m.view.cardList.search).slice(0, n), function (c) {
                 list.append(drawSmallCard(c))
             })
         } else {
@@ -439,7 +441,7 @@ function drawModel(m, dirty, redraw) {
             }
 
             var nextHeaderTime = startOfToday
-            _.each(_.sort(m.cards, function (c) { return c.showTime }), function (c, i) {
+            _.each(_.sort(m.cards, function (c) { return c.showTime }).slice(0, n), function (c, i) {
                 if (i == 0 && c.showTime < startOfToday) {
                     list.append(drawTimeHeader(c.showTime))
                 }
@@ -454,25 +456,47 @@ function drawModel(m, dirty, redraw) {
         return _.splitVert(2, 1, buttons, list)
     }
 
-    var currentCardDiv = drawCurrentCard()
-    var d = _.splitHorz(1/3, 2/3, drawCardEditor(m.workingCard), _.splitHorz(.5, .5, currentCardDiv, drawCardList()))
-    setTimeout(function () {
-        currentCardDiv.find('textarea').focus()
-    }, 0)
+    if (!mobile) {
+        var currentCardDiv = drawCurrentCard()
+        var d = _.splitHorz(1/3, 2/3, drawCardEditor(m.workingCard), _.splitHorz(.5, .5, currentCardDiv, drawCardList()))
+        setTimeout(function () {
+            currentCardDiv.find('textarea').focus()
+        }, 0)
 
-    globalHotkeyYay(d, function (e) {
-        if (e.metaKey && (e.keyCode == 13)) {
-            e.preventDefault()
-            m.cards.push(newCard())
-            dirty()
-            redraw()
+        globalHotkeyYay(d, function (e) {
+            if (e.metaKey && (e.keyCode == 13)) {
+                e.preventDefault()
+                m.cards.push(newCard())
+                dirty()
+                redraw()
+            }
+        })
+        return d
+    } else {
+        if (!m.view.tab) m.view.tab = 'working'
+        var tabTypes = ['working', 'current', 'list']
+        var tabs = $('<div/>')
+        _.each(tabTypes, function (tt) {
+            tabs.append($('<button/>').text(tt).click(function () {
+                m.view.tab = tt
+                redraw()
+            }).css('font-weight', tt == m.view.tab ? 'bold' : 'normal'))
+        })
+
+        var bottom
+        if (m.view.tab == 'working') {
+            bottom = drawCardEditor(m.workingCard)
+        } else if (m.view.tab == 'current') {
+            bottom = drawCurrentCard()
+        } else {
+            bottom = drawCardList()
         }
-    })
 
-    return d
+        return _.splitVert(2, 1, tabs, bottom)
+    }
 }
 
-function drawModelContainer() {
+function drawModelContainer(mobile) {
     var m = newModel()
     var parentM = null
 
@@ -643,7 +667,7 @@ function drawModelContainer() {
             m.cards.push(newCard())
             dirty()
         }
-        bottom.empty().append(drawModel(m, dirty, redraw))
+        bottom.empty().append(drawModel(m, dirty, redraw, mobile))
     }
     var bottom = $('<div style="width:100%;height:100%"/>')
     pull(redraw)
@@ -671,10 +695,12 @@ $(function () {
         return
     }
 
+    var mobile = params['mobile'] || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+
     g_dropbox = new Dropbox.Client({ key : 'g55f8k9sfzzgkar' })
     g_dropbox.authenticate({ interactive : false })
     if (g_dropbox.isAuthenticated()) {
-        $('body').append(drawModelContainer())
+        $('body').append(drawModelContainer(mobile))
     } else {
         $('body').append($('<button/>').text('login with dropbox').click(function () {
             $('body').empty().append(createThrobber())
