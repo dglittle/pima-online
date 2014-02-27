@@ -1,4 +1,21 @@
 
+_.dialog = function (content) {
+    var win = $(window)
+    var w = win.width()
+    var h = win.height()
+    
+    var b
+    $('body').append(b = $('<div style="position:fixed;left:0px;top:0px; z-index:10000;background:black;opacity:0.5"/>').width(w).height(h))
+    
+    var d = $('<div style="position:fixed;left:0px;top:0px;z-index:20000;background:white"/>').append(content)
+    $('body').append(d)
+    
+    _.closeDialog = function () {
+        b.remove()
+        d.remove()
+    }
+}
+
 function comparator(f, desc) {
     return function (a, b) {
         if (f) {
