@@ -285,6 +285,11 @@ function drawModel(m, dirty, redraw, mobile) {
                 openCard(_.min(m.cards, function (c) { return c.showTime }))
             }
         }))
+        d.append($('<button/>').text('new').click(function () {
+            m.cards.push(newCard())
+            dirty()
+            redraw()
+        }))
         return d
     }
 
