@@ -572,20 +572,24 @@ function drawModelContainer(mobile) {
                 }
             })
         }
-        ajax('grabStars', function (ms) {
-            var model = m
-            _.each(ms, function (m) {
-                var c = newCard()
-                var from = m.from
-                from = _.trim(from.replace(/ <[^>]+>/, ''))
-                from = '[' + from + '] '
-                c.text = from + m.subject + '\n: ' + ("https://mail.google.com/mail/#inbox/" + m.id) + "\n\n" + m.body + "\n\nfrom gmail"
-                model.cards.push(c)
+        function grabStars() {
+            ajax('grabStars', function (ms) {
+                if (ms.length == 0) return done()
+                var model = m
+                _.each(ms, function (m) {
+                    var c = newCard()
+                    var from = m.from
+                    from = _.trim(from.replace(/ <[^>]+>/, ''))
+                    from = '[' + from + '] '
+                    c.text = from + m.subject + '\n: ' + ("https://mail.google.com/mail/#inbox/" + m.id) + "\n\n" + m.body + "\n\nfrom gmail"
+                    model.cards.push(c)
+                })
+                dirty()
+                redraw()
+                grabStars()
             })
-            dirty()
-            redraw()
-            done()
-        })
+        }
+        grabStars()
     }))
     top.append($('<button/>').text('edit json').click(function () {
         var d = $('<div/>')
