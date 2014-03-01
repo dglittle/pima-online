@@ -22,7 +22,9 @@ th, td {
 <script src="//dglittle.github.io/gl519/index.js"></script>
 <script src="//dglittle.github.io/gl519/tab.js"></script>
 <script src="//dglittle.github.io/gl519/aes.js"></script>
+<script src="//dglittle.github.io/gl519/jquery.cookie.js"></script>
 <script src="utils.js"></script>
+<script src="scrypt.js"></script>
 <script>
 
 function newCard() {
@@ -117,11 +119,20 @@ function decrypt(ciphertext, password) {
     return Aes.Ctr.decrypt(ciphertext, password, 256);
 }
 
+function enlargePassword(pass) {
+    var scrypt = scrypt_module_factory()
+    var salt = g_dropbox.dropboxUid() + 'B1r1tVHIe7hrGGzUE'
+    return scrypt.to_hex(scrypt.crypto_scrypt(
+        scrypt.encode_utf8(pass),
+        scrypt.encode_utf8(salt),
+        16384, 8, 1, 64))
+}
+
 function getPassword(cb, prompt) {
     var d = $('<div/>').text(prompt || "password:")
     function onOk() {
         _.closeDialog()
-        cb(pass.val())
+        cb(enlargePassword(pass.val()))
     }
     var pass = $('<input type="password"/>').keydown(function (e) {
         if (e.keyCode == 13) {
@@ -145,7 +156,7 @@ function setPassword(cb, prompt) {
             return
         }
         _.closeDialog()
-        cb(pass1.val())
+        cb(enlargePassword(pass1.val()))
     }
     var pass1 = $('<input type="password"/>').keydown(function (e) {
         if (e.keyCode == 13) {
@@ -630,9 +641,12 @@ function drawModelContainer(mobile) {
                         parentM = _.deepClone(m2)
                         parentM.versionTag = f.versionTag
                         parentM.modifiedAt = f.modifiedAt.getTime()
+
+                        $.cookie('pass', m2.pass, { expires : 1 });
+
                         done()
                     }
-                }, m.pass)
+                }, m.pass || $.cookie('pass'))
             } else done()
         })
     }
