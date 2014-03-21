@@ -251,7 +251,8 @@ function drawModel(m, dirty, redraw, mobile) {
         redraw()
     }
 
-    function pushback(c, amount) {
+    function pushback(c, amount1, amount2) {
+        var amount = Math.round(_.lerp(0, amount1, 1, amount2, Math.random()))
         var openNext = true
         if (amount > 0) {
             c.showTime = _.time() + amount
@@ -277,7 +278,10 @@ function drawModel(m, dirty, redraw, mobile) {
         var d = $('<div/>')
         function createButton(label, time) {
             d.append($('<button/>').text(label).click(function () {
-                pushback(c, time)
+                if (time > 2 * day)
+                    pushback(c, time, time)
+                else
+                    pushback(c, time/2, time)
             }).css('font-size', mobile ? 'large' : 'normal'))
         }
         createButton('.', 0)
@@ -301,6 +305,7 @@ function drawModel(m, dirty, redraw, mobile) {
             dirty()
             redraw()
         }))
+        d.append($('<span/>').text('show time: ' + _.englishTimeSpan(c.showTime - _.time())))
         return d
     }
 
