@@ -279,9 +279,9 @@ function drawModel(m, dirty, redraw, mobile) {
         function createButton(label, time) {
             d.append($('<button/>').text(label).click(function () {
                 if (time > 2 * day)
-                    pushback(c, time, time)
-                else
                     pushback(c, time/2, time)
+                else
+                    pushback(c, time, time)
             }).css('font-size', mobile ? 'large' : 'normal'))
         }
         createButton('.', 0)
@@ -674,7 +674,11 @@ function drawModelContainer(mobile) {
         var s = serializeModel(m1)
 
         g_dropbox.writeFile('/data.txt', s, parentM ? { lastVersionTag : parentM.versionTag } : {}, function (err, f) {
-            if (err) return alert(err)
+            if (err) {
+                alert(err)
+                done()
+                return
+            }
             if (f.path.match(/conflicted copy/)) {
                 g_dropbox.remove(f.path, function () {})
                 pull(function () {
